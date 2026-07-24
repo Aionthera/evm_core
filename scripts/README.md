@@ -153,8 +153,8 @@ cd ..
 What `init-chain.sh` does:
 
 1. `aiontherad init` — creates `HOME_DIR`, generates `priv_validator_key.json` and `node_key.json`.
-2. `keys add` — creates the validator account (the mnemonic **is shown only this once**
-   and is also saved to `HOME_DIR/<key>-key-DO-NOT-SHARE.txt`).
+2. `keys add` — creates the validator account (the mnemonic and private key are
+   **shown only this once**, then the script pauses so you can save them before continuing).
 3. `add-genesis-account` + `gentx` + `collect-gentxs` — grants the account an
    initial balance and registers it as a validator directly in the genesis.
 4. Adjusts the genesis `denom_metadata` (required, otherwise `start` panics).
@@ -162,9 +162,6 @@ What `init-chain.sh` does:
 
 **After running:**
 
-- Copy the mnemonic from `KEY_INFO_FILE` to a password vault and delete the
-  file (`shred -u` or `rm -f`).
-- > shred -u /home/user/.aiontherad/validator-key-DO-NOT-SHARE.txt
 - Run [`backup-node.sh`](#4-existing-validator) and move the backup off
   this machine — it's the only moment `priv_validator_key.json` exists
   anywhere.

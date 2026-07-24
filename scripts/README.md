@@ -1,0 +1,247 @@
+# Scripts — Aionthera
+
+Quick reference for which script to run in each situation. All of them are
+idempotent enough to re-read before running — but if in doubt, read the
+script's header (`head -n 20 scripts/<name>.sh`) before executing.
+
+Conventions common to all scripts:
+
+- Configurable via environment variable (`CHAIN_ID`, `HOME_DIR`, `KEY_NAME`,
+  etc.) — run `VAR=value ./scripts/something.sh`. The defaults appear at the
+  top of each file.
+- `BINARY` default: `evm/build/aiontherad`. If it doesn't exist yet, the
+  scripts compile it automatically (`make -C evm build`) before continuing.
+- `HOME_DIR` default: `~/.aiontherad`. If you run more than one node/validator
+  on the same machine, use different `HOME_DIR` values to avoid collisions.
+- Secrets (mnemonic, private key) are requested interactively by
+  default — avoid passing them via environment variable outside of trusted
+  automation.
+
+## Dependencies
+
+The scripts (and the `make -C evm build` they run automatically when the
+binary is missing) need: `go`, a C compiler + `make` (`CGO_ENABLED=1` is
+required by the Cosmos SDK), `git`, `curl` and `jq`.
+
+`backup-node.sh`/`restore-node.sh` additionally need `gpg` — the encryption
+passphrase is prompted for directly in the shell (or fed via
+`BACKUP_PASSPHRASE`), not via `gpg`'s own pinentry, so no `pinentry` package
+is required.
+
+### Arch Linux
+
+```bash
+sudo pacman -Syu
+sudo pacman -S --needed go base-devel git curl jq gnupg
+```
+
+`base-devel` provides `gcc`/`make`/etc. Check `go version` against `evm/go.mod`
+after cloning — if the repo's Arch package is behind the minimum required, get
+a newer one from the AUR (e.g. `yay -S go1.22`) or install manually into
+`/usr/local/go`.
+
+### NixOS
+
+There's no package manager install step — either drop into a temporary shell
+with everything needed:
+
+```bash
+nix-shell -p go gcc gnumake git curl jq gnupg
+```
+
+or, for something that persists across reboots/reconnects, add to
+`/etc/nixos/configuration.nix`:
+
+```nix
+environment.systemPackages = with pkgs; [ go gcc gnumake git curl jq gnupg ];
+```
+
+and run `sudo nixos-rebuild switch`. `make`/`gcc` are not present by default
+outside a devshell or explicit package list — that's why a plain
+`./scripts/init-chain.sh` fails with `make: command not found` on a bare
+NixOS install.
+
+Both `backup-node.sh` and `restore-node.sh` prompt for the passphrase
+directly in the shell (hidden input) and feed it to
+`gpg --batch --pinentry-mode loopback`, so this works the same over a plain
+SSH session with no GUI/pinentry setup. For trusted automation, skip the
+prompt by setting `BACKUP_PASSPHRASE`:
+
+```bash
+BACKUP_PASSPHRASE='sua-senha-forte' ./scripts/backup-node.sh
+BACKUP_PASSPHRASE='sua-senha-forte' ./scripts/restore-node.sh /path/backup.tar.gz.gpg
+```
+
+## Index
+
+| Scenario | Situation | Scripts, in order |
+|---|---|---|
+| [1. Chain from scratch](#1-chain-from-scratch) | First chain, network doesn't exist yet | `init-chain.sh` → `start-chain.sh` |
+| [2. Existing chain](#2-existing-chain) | Join as a full node on a network that's already running | `join-network.sh` → `start-chain.sh` |
+| [3. New validator](#3-new-validator) | Node synced, account with balance, no `create-validator` yet | `create-key.sh` (or `import-key.sh`) → `request-validator.sh` |
+| [4. Existing validator](#4-existing-validator) | Recover/move a validator that already exists on-chain | `backup-node.sh` / `restore-node.sh` (+ `import-key.sh`) |
+
+---
+
+## 1. Chain from scratch
+
+You are creating the Aionthera network for the first time (new genesis, block 0).
+This only makes sense to run **once**, at the original creation of the chain.
+
+```bash
+cd evm && make build
+cd ..
+./scripts/init-chain.sh
+./scripts/start-chain.sh
+```
+
+What `init-chain.sh` does:
+
+1. `aiontherad init` — creates `HOME_DIR`, generates `priv_validator_key.json` and `node_key.json`.
+2. `keys add` — creates the validator account (the mnemonic **is shown only this once**
+   and is also saved to `HOME_DIR/<key>-key-DO-NOT-SHARE.txt`).
+3. `add-genesis-account` + `gentx` + `collect-gentxs` — grants the account an
+   initial balance and registers it as a validator directly in the genesis.
+4. Adjusts the genesis `denom_metadata` (required, otherwise `start` panics).
+5. Adjusts `config.toml` (`mempool.type = app`) and `app.toml` (`json-rpc.enable = true`).
+
+**After running:**
+
+- Copy the mnemonic from `KEY_INFO_FILE` to a password vault and delete the
+  file (`shred -u` or `rm -f`).
+- > shred -u /home/user/.aiontherad/validator-key-DO-NOT-SHARE.txt
+- Run [`backup-node.sh`](#4-existing-validator) and move the backup off
+  this machine — it's the only moment `priv_validator_key.json` exists
+  anywhere.
+
+---
+
+## 2. Existing chain
+
+You want to bring up a **new full node** pointing at an Aionthera network that
+is already running in production (does not generate a new genesis).
+
+```bash
+cd evm && make build
+cd ..
+
+# grab this by running it on an already-active node on the network:
+#   aiontherad tendermint show-node-id --home ~/.aiontherad
+GENESIS_SOURCE=https://<some-node>/genesis.json \
+PERSISTENT_PEERS="<node_id>@<ip>:26656" \
+CHAIN_ID=aionthera_78912-1 \
+./scripts/join-network.sh
+
+./scripts/start-chain.sh
+```
+
+What `join-network.sh` does:
+
+1. `aiontherad init` — generates **new** `priv_validator_key.json`/`node_key.json`
+   (this specific node's identity, does not inherit anything from another node).
+2. Downloads/copies the network's real `genesis.json` and checks that the `chain_id` matches.
+3. Configures `persistent_peers` in `config.toml`.
+4. Same mandatory adjustments as `init-chain.sh` (mempool, json-rpc).
+
+**After syncing** (`catching_up: false`), this node is just a full node
+— it only becomes a validator if you follow scenario 3.
+
+---
+
+## 3. New validator
+
+You have a full node that's **already synced** and an account with enough
+`aaion` balance, and you want to register that account as a validator for the
+first time (post-genesis — different from `gentx`, which is only valid at block 0).
+
+First, make sure the account exists in this node's keyring:
+
+```bash
+# new account (new mnemonic)
+./scripts/create-key.sh
+
+# OR an account that already exists elsewhere (e.g. already has a balance)
+./scripts/import-key.sh
+```
+
+Then, with the node synced (`catching_up: false`):
+
+```bash
+HOME_DIR=~/.aiontherad \
+CHAIN_ID=aionthera_78912-1 \
+FROM_KEY=validator \
+MONIKER="my-validator" \
+./scripts/request-validator.sh
+```
+
+`request-validator.sh` builds and sends the `tx staking create-validator` tx using
+this node's consensus pubkey (`tendermint show-validator`) and the account
+provided in `FROM_KEY` as self-delegation. **This can only be done once
+per operator account/address** — running it again with the same account fails
+because the validator already exists.
+
+**After creating it:** run [`backup-node.sh`](#4-existing-validator)
+immediately and move the backup off this machine. From this point on,
+`priv_validator_key.json` is your validator's on-chain identity — losing it
+without a backup means permanently losing the ability to sign blocks with
+that identity.
+
+---
+
+## 4. Existing validator
+
+Situations where the validator **is already registered on-chain** (scenario 3
+has already run at some point) and you need to move, recover, or switch
+machines.
+
+### 4.1 Routine backup (do this regularly, not just before touching the machine)
+
+```bash
+HOME_DIR=~/.aiontherad ./scripts/backup-node.sh
+```
+
+Generates a `.tar.gz.gpg` with `priv_validator_key.json`, `node_key.json`,
+`priv_validator_state.json` and the `keyring-file/` (accounts). **Move this file
+off the machine immediately** (USB drive, password vault, separate
+storage) — see the detailed warnings in the script itself.
+
+### 4.2 Restore on a new machine (e.g. reformatted PC, VPS migration)
+
+```bash
+cd evm && make build
+cd ..
+
+# 1) prepare genesis + peers (generates NEW keys, which will be overwritten in step 3)
+GENESIS_SOURCE=... PERSISTENT_PEERS=... CHAIN_ID=aionthera_78912-1 ./scripts/join-network.sh
+
+# 2) if you only have the account mnemonic (no backup of priv_validator_key.json),
+#    skip to step 3 without restore-node.sh — the old consensus key is gone anyway.
+#    If you DO have the backup-node.sh backup:
+./scripts/restore-node.sh /path/aionthera-backup-....tar.gz.gpg
+
+# 3) if you didn't restore keyring-file in the step above, import the account via mnemonic:
+HOME_DIR=~/.aiontherad KEY_NAME=validator ./scripts/import-key.sh
+
+./scripts/start-chain.sh
+```
+
+`restore-node.sh` asks for explicit confirmation (`CONFIRM`) before continuing,
+because restoring the same consensus key on two nodes running at the same
+time causes **double-sign and slashing**. Only run this once you're certain
+that the original machine/instance is powered off.
+
+### 4.3 What to do with only the address, or only the mnemonic (no node backup)
+
+| You have | What can be recovered |
+|---|---|
+| Account mnemonic + backup of `priv_validator_key.json` (via `backup-node.sh`) | Full recovery — follow 4.2. |
+| Only the account mnemonic, no backup of `priv_validator_key.json` | The account and balance come back (`import-key.sh`), but the **old consensus identity is lost** — `join-network.sh` generates a new pubkey, which is not the same one already registered on-chain for that validator. Depending on the chain's Cosmos SDK version, it may be possible to rotate the existing validator's consensus key; if that's not supported, you need to undelegate everything from the old validator and, once it leaves the staking set, create a new validator (scenario 3) with the same account. |
+| Only the address (bech32/0x), no mnemonic and no backup of anything | There's nothing to recover — an address alone doesn't allow signing transactions. Without the mnemonic or a copy of the keyring, the account and any balance in it are permanently inaccessible. |
+
+After restoring/recovering, if the validator was jailed because of the
+downtime:
+
+```bash
+aiontherad --home ~/.aiontherad tx slashing unjail \
+  --from validator --chain-id aionthera_78912-1
+```

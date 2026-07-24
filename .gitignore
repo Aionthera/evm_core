@@ -1,0 +1,19 @@
+# Go build artifacts
+build/
+*.log
+
+# Cosmos SDK node home / keys (if ever run inside this repo)
+.aiontherad/
+*.pk
+*.key
+
+# Backups gerados por scripts/backup-node.sh (contêm chave de consenso)
+backups/
+
+# Node / Hardhat scaffolds used for testing
+node_modules/
+artifacts/
+cache/
+
+# Env files
+.env

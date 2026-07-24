@@ -1,0 +1,229 @@
+#!/usr/bin/env bash
+#
+# Initializes the Aionthera chain from scratch: init, validator key, genesis
+# (balance + gentx), denom metadata fix and config.toml/app.toml adjustments.
+#
+# Usage:
+#   ./scripts/init-chain.sh
+#
+# Run this from anywhere in the repo; the paths below are relative to the
+# project root (where this script lives inside scripts/).
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Variables — edit here
+# ---------------------------------------------------------------------------
+
+CHAIN_ID="${CHAIN_ID:-aionthera_78912-1}"
+MONIKER="${MONIKER:-aionthera-validator-1}"
+
+# Compiled binary (make build generates it in evm/build/aiontherad)
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BINARY="${BINARY:-$REPO_ROOT/evm/build/aiontherad}"
+
+# Node home. Leave empty to use the default ($HOME/.aiontherad).
+HOME_DIR="${HOME_DIR:-$HOME/.aiontherad}"
+
+# Keyring backend: test | file | os
+# - test: no password, only for local dev/testnet.
+# - file: asks for a password; if KEYRING_PASSPHRASE is filled in below, the
+#         script feeds the password automatically via stdin.
+# - os:   uses the OS's native keychain (needs a daemon running).
+KEYRING_BACKEND="${KEYRING_BACKEND:-file}"
+KEYRING_PASSPHRASE="${KEYRING_PASSPHRASE:-}"
+
+VALIDATOR_KEY_NAME="${VALIDATOR_KEY_NAME:-validator}"
+
+# Denominations
+BASE_DENOM="${BASE_DENOM:-aaion}"       # "on-chain" denom (18 decimals, what the EVM uses)
+DISPLAY_DENOM="${DISPLAY_DENOM:-aion}"  # denom shown to humans
+DENOM_EXPONENT="${DENOM_EXPONENT:-18}"
+TOKEN_NAME="${TOKEN_NAME:-Aionthera}"
+TOKEN_SYMBOL="${TOKEN_SYMBOL:-AION}"
+
+# Address of the WERC20 precompile that exposes BASE_DENOM through the
+# standard ERC20 interface (transfer, balanceOf, approve, ...). Must match
+# WAIONPrecompileAddress in evm/evmd/upgrades.go.
+WAION_PRECOMPILE_ADDRESS="${WAION_PRECOMPILE_ADDRESS:-0x0000000000000000000000000000000000000900}"
+
+# Validator's initial balance and self-bond amount (gentx), in BASE_DENOM
+INITIAL_BALANCE="${INITIAL_BALANCE:-100000000000000000000000${BASE_DENOM}}"
+GENTX_STAKE_AMOUNT="${GENTX_STAKE_AMOUNT:-1000000000000000000000${BASE_DENOM}}"
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+log() { echo ">> $*"; }
+
+run_keyring_cmd() {
+  # Runs a command that may prompt for the "file" keyring password.
+  # If KEYRING_PASSPHRASE is set, feeds it via stdin (once for reading,
+  # twice for creation — keys add is handled separately, see below).
+  if [[ "$KEYRING_BACKEND" == "file" && -n "$KEYRING_PASSPHRASE" ]]; then
+    printf '%s\n' "$KEYRING_PASSPHRASE" | "$@"
+  else
+    "$@"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Initial checks
+# ---------------------------------------------------------------------------
+
+if [[ ! -x "$BINARY" ]]; then
+  log "Binary not found at $BINARY — building it (make -C $REPO_ROOT/evm build)"
+  make -C "$REPO_ROOT/evm" build
+  if [[ ! -x "$BINARY" ]]; then
+    echo "Build finished but binary still not found at: $BINARY"
+    exit 1
+  fi
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq not found. Install it before continuing (e.g. pacman -S jq / apt install jq)."
+  exit 1
+fi
+
+if [[ -d "$HOME_DIR" ]]; then
+  echo "Home already exists at: $HOME_DIR"
+  echo "This script initializes a chain from scratch and will overwrite this directory."
+  read -r -p "Delete and recreate? [y/N] " confirm
+  if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+    echo "Aborted. If you only want to reset the state (keeping keys/genesis), use:"
+    echo "  $BINARY --home $HOME_DIR tendermint unsafe-reset-all"
+    exit 1
+  fi
+  rm -rf "$HOME_DIR"
+fi
+
+log "Config: chain-id=$CHAIN_ID moniker=$MONIKER home=$HOME_DIR keyring=$KEYRING_BACKEND denom=$BASE_DENOM"
+
+# ---------------------------------------------------------------------------
+# Init + validator key
+# ---------------------------------------------------------------------------
+
+log "init"
+"$BINARY" --home "$HOME_DIR" init "$MONIKER" --chain-id "$CHAIN_ID"
+
+log "keys add $VALIDATOR_KEY_NAME"
+# The mnemonic is only shown this one time — the Cosmos SDK never writes it
+# to disk. That's why the entire output (address + mnemonic) is saved to a
+# file in addition to appearing on the terminal, so you don't depend on
+# copying it at the right moment.
+KEY_INFO_FILE="$HOME_DIR/${VALIDATOR_KEY_NAME}-key-DO-NOT-SHARE.txt"
+if [[ "$KEYRING_BACKEND" == "file" && -n "$KEYRING_PASSPHRASE" ]]; then
+  printf '%s\n%s\n' "$KEYRING_PASSPHRASE" "$KEYRING_PASSPHRASE" |
+    "$BINARY" --home "$HOME_DIR" keys add "$VALIDATOR_KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1 | tee "$KEY_INFO_FILE"
+else
+  "$BINARY" --home "$HOME_DIR" keys add "$VALIDATOR_KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1 | tee "$KEY_INFO_FILE"
+fi
+chmod 600 "$KEY_INFO_FILE"
+
+echo
+echo "*** Mnemonic saved to $KEY_INFO_FILE — copy it to a password vault and delete the file afterwards (see the summary at the end). ***"
+echo
+
+# ---------------------------------------------------------------------------
+# Genesis: initial balance + gentx
+# ---------------------------------------------------------------------------
+
+log "add-genesis-account"
+run_keyring_cmd "$BINARY" --home "$HOME_DIR" genesis add-genesis-account \
+  "$VALIDATOR_KEY_NAME" "$INITIAL_BALANCE" --keyring-backend "$KEYRING_BACKEND"
+
+log "gentx"
+run_keyring_cmd "$BINARY" --home "$HOME_DIR" genesis gentx \
+  "$VALIDATOR_KEY_NAME" "$GENTX_STAKE_AMOUNT" \
+  --chain-id "$CHAIN_ID" --keyring-backend "$KEYRING_BACKEND"
+
+log "collect-gentxs"
+"$BINARY" --home "$HOME_DIR" genesis collect-gentxs
+
+# ---------------------------------------------------------------------------
+# Denom metadata in the bank module (required, otherwise start panics)
+# ---------------------------------------------------------------------------
+
+log "adjusting denom_metadata in genesis"
+GENESIS_FILE="$HOME_DIR/config/genesis.json"
+TMP_FILE="$(mktemp)"
+
+jq --arg base "$BASE_DENOM" \
+   --arg display "$DISPLAY_DENOM" \
+   --argjson exponent "$DENOM_EXPONENT" \
+   --arg name "$TOKEN_NAME" \
+   --arg symbol "$TOKEN_SYMBOL" \
+   '.app_state.bank.denom_metadata = [{
+      "description": ("The native staking and gas token of the " + $name + " chain"),
+      "denom_units": [
+        {"denom": $base, "exponent": 0, "aliases": []},
+        {"denom": $display, "exponent": $exponent, "aliases": []}
+      ],
+      "base": $base,
+      "display": $display,
+      "name": $name,
+      "symbol": $symbol
+    }]' "$GENESIS_FILE" > "$TMP_FILE"
+mv "$TMP_FILE" "$GENESIS_FILE"
+
+# ---------------------------------------------------------------------------
+# ERC20 module: register BASE_DENOM as a native WERC20 precompile
+# ---------------------------------------------------------------------------
+# NOTE: `aiontherad init` builds the default genesis from each module's own
+# DefaultGenesis() via genutilcli.InitCmd(evmApp.BasicModuleManager, ...)
+# (evm/evmd/cmd/evmd/cmd/root.go). It does NOT go through EVMD.DefaultGenesis()
+# in evm/evmd/app.go, so the token pair set up there never reaches a
+# freshly-initialized genesis.json — it has to be patched in here instead.
+
+log "registering $BASE_DENOM as native ERC20 precompile at $WAION_PRECOMPILE_ADDRESS"
+
+jq --arg denom "$BASE_DENOM" \
+   --arg addr "$WAION_PRECOMPILE_ADDRESS" \
+   '.app_state.erc20.token_pairs = [{
+      "erc20_address": $addr,
+      "denom": $denom,
+      "enabled": true,
+      "contract_owner": "OWNER_MODULE"
+    }] |
+    .app_state.erc20.native_precompiles = [$addr]' "$GENESIS_FILE" > "$TMP_FILE"
+mv "$TMP_FILE" "$GENESIS_FILE"
+
+log "validate-genesis"
+"$BINARY" --home "$HOME_DIR" genesis validate-genesis
+
+# ---------------------------------------------------------------------------
+# config.toml / app.toml
+# ---------------------------------------------------------------------------
+
+log "config.toml: mempool.type = app"
+sed -i 's/^type = "flood"$/type = "app"/' "$HOME_DIR/config/config.toml"
+
+log "app.toml: [json-rpc] enable = true"
+sed -i '/\[json-rpc\]/,/^\[/ s/^enable = false/enable = true/' "$HOME_DIR/config/app.toml"
+
+# ---------------------------------------------------------------------------
+# Done
+# ---------------------------------------------------------------------------
+
+echo
+echo "======================================================================"
+echo "Key summary for '$VALIDATOR_KEY_NAME'"
+echo "======================================================================"
+
+BECH32_ADDR="$(run_keyring_cmd "$BINARY" --home "$HOME_DIR" keys show "$VALIDATOR_KEY_NAME" -a --keyring-backend "$KEYRING_BACKEND")"
+
+echo "Address (bech32, account):       $BECH32_ADDR"
+echo "Address (bech32, valoper):        $(run_keyring_cmd "$BINARY" --home "$HOME_DIR" keys show "$VALIDATOR_KEY_NAME" --bech val -a --keyring-backend "$KEYRING_BACKEND")"
+echo "0x address (same account, for MetaMask):"
+"$BINARY" --home "$HOME_DIR" debug addr "$BECH32_ADDR"
+echo
+echo "Mnemonic + keys add output:      $KEY_INFO_FILE"
+echo "  -> copy it to a password vault and then delete it:  shred -u \"$KEY_INFO_FILE\"  (or rm -f)"
+echo
+echo "To import the account into MetaMask (exposes the private key in plain text):"
+echo "  $BINARY --home $HOME_DIR keys unsafe-export-eth-key $VALIDATOR_KEY_NAME --keyring-backend $KEYRING_BACKEND"
+echo "======================================================================"
+echo
+echo "Done. To bring up the node:"
+echo "  ./scripts/start-chain.sh"

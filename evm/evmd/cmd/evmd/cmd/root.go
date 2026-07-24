@@ -37,7 +37,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/snapshot"
 	sdkserver "github.com/cosmos/cosmos-sdk/server"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
-	simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
@@ -49,6 +48,20 @@ import (
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
 )
 
+// tempAppOptions is the minimal AppOptions used to build the throwaway app
+// instance below. It reports the default node home so that side effects of
+// app construction (e.g. the upgrade keeper ensuring its data dir exists)
+// land under the expected home directory instead of the process's current
+// working directory.
+type tempAppOptions struct{}
+
+func (tempAppOptions) Get(key string) interface{} {
+	if key == flags.FlagHome {
+		return config.MustGetDefaultNodeHome()
+	}
+	return nil
+}
+
 // NewRootCmd creates a new root command for evmd. It is called once in the
 // main function.
 func NewRootCmd() *cobra.Command {
@@ -59,7 +72,7 @@ func NewRootCmd() *cobra.Command {
 		log.NewNopLogger(),
 		dbm.NewMemDB(),
 		true,
-		simtestutil.EmptyAppOptions{},
+		tempAppOptions{},
 	)
 
 	encodingConfig := sdktestutil.TestEncodingConfig{

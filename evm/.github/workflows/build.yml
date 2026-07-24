@@ -17,15 +17,19 @@ permissions:
 jobs:
   build:
     timeout-minutes: 15
-    runs-on: ${{ matrix.runner }}
+    runs-on: depot-ubuntu-22.04-4
     strategy:
       fail-fast: false
       matrix:
         include:
-          - goarch: amd64
-            runner: depot-ubuntu-22.04-4
-          - goarch: arm64
-            runner: depot-ubuntu-22.04-arm-4
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
 
     steps:
       - name: Checkout repository
@@ -62,12 +66,15 @@ jobs:
       - name: Build evmd
         working-directory: evmd
         env:
-          GOOS: linux
+          GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "1"
+          CGO_ENABLED: "0"
         shell: bash
         run: |
-          BINARY_NAME="evmd-${{ steps.version.outputs.branch }}-${{ steps.version.outputs.commit_short }}-linux-${{ matrix.goarch }}"
+          BINARY_NAME="evmd-${{ steps.version.outputs.branch }}-${{ steps.version.outputs.commit_short }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
 
           go build \
             -trimpath \
@@ -86,15 +93,17 @@ jobs:
         working-directory: evmd
         shell: bash
         run: |
-          BINARY_NAME="evmd-${{ steps.version.outputs.branch }}-${{ steps.version.outputs.commit_short }}-linux-${{ matrix.goarch }}"
+          BINARY_NAME="evmd-${{ steps.version.outputs.branch }}-${{ steps.version.outputs.commit_short }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
           sha256sum "${BINARY_NAME}" > "${BINARY_NAME}.sha256"
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: evmd-${{ steps.version.outputs.branch }}-${{ steps.version.outputs.commit_short }}-linux-${{ matrix.goarch }}
+          name: evmd-${{ steps.version.outputs.branch }}-${{ steps.version.outputs.commit_short }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            evmd/evmd-${{ steps.version.outputs.branch }}-${{ steps.version.outputs.commit_short }}-linux-${{ matrix.goarch }}
-            evmd/evmd-${{ steps.version.outputs.branch }}-${{ steps.version.outputs.commit_short }}-linux-${{ matrix.goarch }}.sha256
+            evmd/evmd-${{ steps.version.outputs.branch }}-${{ steps.version.outputs.commit_short }}-${{ matrix.goos }}-${{ matrix.goarch }}*
           retention-days: 30
           if-no-files-found: error

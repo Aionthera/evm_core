@@ -15,6 +15,7 @@ COMMIT := $(shell git log -1 --format='%H')
 BINDIR ?= $(GOPATH)/bin
 BUILDDIR ?= $(CURDIR)/build
 EXAMPLE_BINARY := aiontherad
+BINARY_EXT ?=
 
 ###############################################################################
 ###                              Repo Info                                  ###
@@ -94,29 +95,48 @@ ifneq (,$(findstring nooptimization,$(COSMOS_BUILD_OPTIONS)))
   BUILD_FLAGS += -gcflags "all=-N -l"
 endif
 
+OUT_NAME ?= $(EXAMPLE_BINARY)$(BINARY_EXT)
+
 # Build into $(BUILDDIR)
 build: go.sum $(BUILDDIR)/
-	echo "🏗️  Building evmd to $(BUILDDIR)/$(EXAMPLE_BINARY) ..."
+	echo "🏗️  Building evmd to $(BUILDDIR)/$(OUT_NAME) ..."
 	echo "BUILD_FLAGS: $(BUILD_FLAGS)"
-	cd $(EVMD_DIR) && CGO_ENABLED="1" \
-	  go build $(BUILD_FLAGS) -o $(BUILDDIR)/$(EXAMPLE_BINARY) $(EVMD_MAIN_PKG)
+	cd $(EVMD_DIR) && CGO_ENABLED="0" \
+	  go build $(BUILD_FLAGS) -o $(BUILDDIR)/$(OUT_NAME) $(EVMD_MAIN_PKG)
 
-# Cross-compile for Linux AMD64
-build-linux:
-	GOOS=linux GOARCH=amd64 $(MAKE) build
+# Cross-compile for Linux AMD64 / ARM64
+build-linux-amd64:
+	GOOS=linux GOARCH=amd64 OUT_NAME=$(EXAMPLE_BINARY)-linux-amd64 $(MAKE) build
+
+build-linux-arm64:
+	GOOS=linux GOARCH=arm64 OUT_NAME=$(EXAMPLE_BINARY)-linux-arm64 $(MAKE) build
+
+build-linux: build-linux-amd64
+
+# Cross-compile for Windows AMD64 / ARM64
+build-windows-amd64:
+	GOOS=windows GOARCH=amd64 OUT_NAME=$(EXAMPLE_BINARY)-windows-amd64.exe $(MAKE) build
+
+build-windows-arm64:
+	GOOS=windows GOARCH=arm64 OUT_NAME=$(EXAMPLE_BINARY)-windows-arm64.exe $(MAKE) build
+
+build-windows: build-windows-amd64
+
+# Build all four release targets (linux/windows x amd64/arm64)
+build-release: build-linux-amd64 build-linux-arm64 build-windows-amd64 build-windows-arm64
 
 # Install into $(BINDIR)
 install: go.sum
 	@echo "🚚  Installing evmd to $(BINDIR) ..."
 	@echo "BUILD_FLAGS: $(BUILD_FLAGS)"
-	@cd $(EVMD_DIR) && CGO_ENABLED="1" \
+	@cd $(EVMD_DIR) && CGO_ENABLED="0" \
 	  go install $(BUILD_FLAGS) $(EVMD_MAIN_PKG)
 
 $(BUILDDIR)/:
 	mkdir -p $(BUILDDIR)/
 
 # Default & all target
-.PHONY: all build build-linux install
+.PHONY: all build build-linux build-linux-amd64 build-linux-arm64 build-windows build-windows-amd64 build-windows-arm64 build-release install
 all: build
 
 ###############################################################################

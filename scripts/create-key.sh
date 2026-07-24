@@ -59,18 +59,18 @@ fi
 
 echo ">> keys add $KEY_NAME (keyring: $KEYRING_BACKEND, home: $HOME_DIR)"
 
-# The mnemonic is only shown this one time — the Cosmos SDK never writes it
-# to disk. That's why the entire output (address + mnemonic) is also saved
-# to a file, so you don't depend on copying it at the right moment.
-KEY_INFO_FILE="$HOME_DIR/${KEY_NAME}-key-DO-NOT-SHARE.txt"
-
 if [[ "$KEYRING_BACKEND" == "file" && -n "$KEYRING_PASSPHRASE" ]]; then
   printf '%s\n%s\n' "$KEYRING_PASSPHRASE" "$KEYRING_PASSPHRASE" |
-    "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1 | tee "$KEY_INFO_FILE"
+    "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1
 else
-  "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1 | tee "$KEY_INFO_FILE"
+  "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1
 fi
-chmod 600 "$KEY_INFO_FILE"
+
+echo "Private key (0x):"
+run_keyring_cmd "$BINARY" --home "$HOME_DIR" keys unsafe-export-eth-key "$KEY_NAME" --keyring-backend "$KEYRING_BACKEND" | sed 's/^/0x/'
+
+echo
+read -rp "Save the mnemonic and private key, then press ENTER to continue..."
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -86,10 +86,4 @@ echo "Address (bech32, account):       $BECH32_ADDR"
 echo "Address (bech32, valoper):        $(run_keyring_cmd "$BINARY" --home "$HOME_DIR" keys show "$KEY_NAME" --bech val -a --keyring-backend "$KEYRING_BACKEND")"
 echo "0x address (same account, for MetaMask):"
 "$BINARY" --home "$HOME_DIR" debug addr "$BECH32_ADDR"
-echo
-echo "Mnemonic + keys add output:      $KEY_INFO_FILE"
-echo "  -> copy it to a password vault and then delete it:  shred -u \"$KEY_INFO_FILE\"  (or rm -f)"
-echo
-echo "To import the account into MetaMask (exposes the private key in plain text):"
-echo "  $BINARY --home $HOME_DIR keys unsafe-export-eth-key $KEY_NAME --keyring-backend $KEYRING_BACKEND"
 echo "======================================================================"

@@ -91,8 +91,8 @@ SSH session with no GUI/pinentry setup. For trusted automation, skip the
 prompt by setting `BACKUP_PASSPHRASE`:
 
 ```bash
-BACKUP_PASSPHRASE='sua-senha-forte' ./scripts/backup-node.sh
-BACKUP_PASSPHRASE='sua-senha-forte' ./scripts/restore-node.sh /path/backup.tar.gz.gpg
+BACKUP_PASSPHRASE='strong_password' ./scripts/backup-node.sh
+BACKUP_PASSPHRASE='strong_password' ./scripts/restore-node.sh /path/backup.tar.gz.gpg
 ```
 
 ## Cross-compiling for other platforms

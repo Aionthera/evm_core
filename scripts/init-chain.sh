@@ -109,21 +109,18 @@ log "init"
 "$BINARY" --home "$HOME_DIR" init "$MONIKER" --chain-id "$CHAIN_ID"
 
 log "keys add $VALIDATOR_KEY_NAME"
-# The mnemonic is only shown this one time — the Cosmos SDK never writes it
-# to disk. That's why the entire output (address + mnemonic) is saved to a
-# file in addition to appearing on the terminal, so you don't depend on
-# copying it at the right moment.
-KEY_INFO_FILE="$HOME_DIR/${VALIDATOR_KEY_NAME}-key-DO-NOT-SHARE.txt"
 if [[ "$KEYRING_BACKEND" == "file" && -n "$KEYRING_PASSPHRASE" ]]; then
   printf '%s\n%s\n' "$KEYRING_PASSPHRASE" "$KEYRING_PASSPHRASE" |
-    "$BINARY" --home "$HOME_DIR" keys add "$VALIDATOR_KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1 | tee "$KEY_INFO_FILE"
+    "$BINARY" --home "$HOME_DIR" keys add "$VALIDATOR_KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1
 else
-  "$BINARY" --home "$HOME_DIR" keys add "$VALIDATOR_KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1 | tee "$KEY_INFO_FILE"
+  "$BINARY" --home "$HOME_DIR" keys add "$VALIDATOR_KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1
 fi
-chmod 600 "$KEY_INFO_FILE"
+
+echo "Private key (0x):"
+run_keyring_cmd "$BINARY" --home "$HOME_DIR" keys unsafe-export-eth-key "$VALIDATOR_KEY_NAME" --keyring-backend "$KEYRING_BACKEND" | sed 's/^/0x/'
 
 echo
-echo "*** Mnemonic saved to $KEY_INFO_FILE — copy it to a password vault and delete the file afterwards (see the summary at the end). ***"
+read -rp "Save the mnemonic and private key, then press ENTER to continue..."
 echo
 
 # ---------------------------------------------------------------------------
@@ -219,11 +216,6 @@ echo "Address (bech32, valoper):        $(run_keyring_cmd "$BINARY" --home "$HOM
 echo "0x address (same account, for MetaMask):"
 "$BINARY" --home "$HOME_DIR" debug addr "$BECH32_ADDR"
 echo
-echo "Mnemonic + keys add output:      $KEY_INFO_FILE"
-echo "  -> copy it to a password vault and then delete it:  shred -u \"$KEY_INFO_FILE\"  (or rm -f)"
-echo
-echo "To import the account into MetaMask (exposes the private key in plain text):"
-echo "  $BINARY --home $HOME_DIR keys unsafe-export-eth-key $VALIDATOR_KEY_NAME --keyring-backend $KEYRING_BACKEND"
 echo "======================================================================"
 echo
 echo "Done. To bring up the node:"

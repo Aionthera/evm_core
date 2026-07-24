@@ -2,6 +2,9 @@
 build/
 *.log
 
+# Go module/build cache (relocated here from ~/go, see scripts/README.md)
+.go/
+
 # Cosmos SDK node home / keys (if ever run inside this repo)
 .aiontherad/
 *.pk

@@ -20,13 +20,36 @@ Conventions common to all scripts:
 ## Dependencies
 
 The scripts (and the `make -C evm build` they run automatically when the
-binary is missing) need: `go`, a C compiler + `make` (`CGO_ENABLED=1` is
-required by the Cosmos SDK), `git`, `curl` and `jq`.
+binary is missing — which also runs `setup-go-env.sh` first, see below) need:
+`go`, a C compiler + `make` (`CGO_ENABLED=1` is required by the Cosmos SDK),
+`git`, `curl` and `jq`.
 
 `backup-node.sh`/`restore-node.sh` additionally need `gpg` — the encryption
 passphrase is prompted for directly in the shell (or fed via
 `BACKUP_PASSPHRASE`), not via `gpg`'s own pinentry, so no `pinentry` package
 is required.
+
+### Keeping Go's cache out of `~/`
+
+By default Go writes its module cache (`GOMODCACHE`) and build cache
+(`GOCACHE`) under `~/go` and `~/.cache/go-build`, which can grow to a few GB
+per machine. `setup-go-env.sh` points those at `.go/` inside the repo
+checkout instead (handy on small disks or shared boxes):
+
+```bash
+./scripts/setup-go-env.sh
+```
+
+Every script that builds the binary automatically (`make -C evm build`) runs
+this first, so you don't need to call it yourself before the usual
+scenarios below — it's only useful to run standalone if you want the cache
+relocated before the first build, or on a machine where you'll build `evm`
+by hand outside these scripts.
+
+`.go/` is already in `.gitignore`. This is a per-user `go env` setting, not
+repo-specific config, so it applies to any Go project built on that machine
+afterward — it's idempotent, so re-running it (e.g. once per script
+invocation) is harmless.
 
 ### Arch Linux
 

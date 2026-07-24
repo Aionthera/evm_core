@@ -52,6 +52,7 @@ KEYRING_PASSPHRASE="${KEYRING_PASSPHRASE:-}"
 
 if [[ ! -x "$BINARY" ]]; then
   echo ">> Binary not found at $BINARY — building it (make -C $REPO_ROOT/evm build)"
+  "$REPO_ROOT/scripts/setup-go-env.sh"
   make -C "$REPO_ROOT/evm" build
   if [[ ! -x "$BINARY" ]]; then
     echo "Build finished but binary still not found at: $BINARY"

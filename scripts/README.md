@@ -95,6 +95,38 @@ BACKUP_PASSPHRASE='sua-senha-forte' ./scripts/backup-node.sh
 BACKUP_PASSPHRASE='sua-senha-forte' ./scripts/restore-node.sh /path/backup.tar.gz.gpg
 ```
 
+## Cross-compiling for other platforms
+
+The scripts only run `aiontherad` for the OS/arch of the machine they're
+executed on (`evm/build/aiontherad`, no suffix). To produce binaries for
+other platforms — e.g. building release artifacts on Linux to distribute to
+Windows or ARM64 machines — use the cross-compile targets in `evm/Makefile`
+directly. Since `CGO_ENABLED=0` for these builds, no target-platform C
+toolchain is required; the host machine's Go toolchain cross-compiles
+everything.
+
+```bash
+cd evm
+
+make build-linux-amd64    # build/aiontherad-linux-amd64
+make build-linux-arm64    # build/aiontherad-linux-arm64
+make build-windows-amd64  # build/aiontherad-windows-amd64.exe
+make build-windows-arm64  # build/aiontherad-windows-arm64.exe
+
+# or all four at once:
+make build-release
+```
+
+`make build-linux` is an alias for `build-linux-amd64`, and `make
+build-windows` for `build-windows-amd64` (the amd64 variant of each OS is
+the common case). To run one of these cross-compiled binaries with the
+`scripts/*.sh` above, point `BINARY` at it explicitly instead of relying on
+the default:
+
+```bash
+BINARY=evm/build/aiontherad-linux-arm64 ./scripts/init-chain.sh
+```
+
 ## Index
 
 | Scenario | Situation | Scripts, in order |

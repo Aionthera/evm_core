@@ -195,7 +195,7 @@ log "feemarket: setting min_gas_price and base_fee to $MIN_GAS_PRICE"
 MIN_GAS_PRICE_DEC="${MIN_GAS_PRICE}.000000000000000000"
 jq --arg price "$MIN_GAS_PRICE_DEC" \
    '.app_state.feemarket.params.min_gas_price = $price |
-    .app_state.feemarket.state.base_fee = $price' \
+    .app_state.feemarket.params.base_fee = $price' \
    "$GENESIS_FILE" > "$TMP_FILE"
 mv "$TMP_FILE" "$GENESIS_FILE"
 

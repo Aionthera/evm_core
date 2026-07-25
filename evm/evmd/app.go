@@ -865,57 +865,11 @@ func (app *EVMD) InitChainer(ctx sdk.Context, req *abci.RequestInitChain) (*abci
 		panic(err)
 	}
 
-	// The vm module's InitGenesis calls InitEvmCoinInfo which requires the bank
-	// keeper to have denom metadata for the EVM denom. Ensure it is always present
-	// in the bank genesis state so the chain starts correctly even when the genesis
-	// file was created without the init-chain.sh jq patches.
-	genesisState = app.ensureEvmDenomMetadataInGenesis(genesisState)
-
 	if err := app.UpgradeKeeper.SetModuleVersionMap(ctx, app.ModuleManager.GetVersionMap()); err != nil {
 		panic(err)
 	}
 
 	return app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
-}
-
-// ensureEvmDenomMetadataInGenesis injects the aaion denom metadata into the bank
-// genesis state if it is missing. This is needed because `aiontherad init` does not
-// include bank denom_metadata by default.
-func (app *EVMD) ensureEvmDenomMetadataInGenesis(genesis GenesisState) GenesisState {
-	bankRaw := genesis[banktypes.ModuleName]
-	if bankRaw == nil {
-		return genesis
-	}
-
-	var bankState banktypes.GenesisState
-	if err := app.appCodec.UnmarshalJSON(bankRaw, &bankState); err != nil {
-		return genesis
-	}
-
-	for _, meta := range bankState.DenomMetadata {
-		if meta.Base == "aaion" {
-			return genesis
-		}
-	}
-
-	bankState.DenomMetadata = append(bankState.DenomMetadata, banktypes.Metadata{
-		Description: "The native staking and gas token of the Aionthera chain",
-		DenomUnits: []*banktypes.DenomUnit{
-			{Denom: "aaion", Exponent: 0, Aliases: []string{}},
-			{Denom: "aion", Exponent: 18, Aliases: []string{}},
-		},
-		Base:    "aaion",
-		Display: "aion",
-		Name:    "Aionthera",
-		Symbol:  "AION",
-	})
-
-	raw, err := app.appCodec.MarshalJSON(&bankState)
-	if err != nil {
-		return genesis
-	}
-	genesis[banktypes.ModuleName] = raw
-	return genesis
 }
 
 func (app *EVMD) PreBlocker(ctx sdk.Context, _ *abci.RequestFinalizeBlock) (*sdk.ResponsePreBlock, error) {

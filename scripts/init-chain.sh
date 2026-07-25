@@ -47,10 +47,6 @@ TOKEN_SYMBOL="${TOKEN_SYMBOL:-AION}"
 # WAIONPrecompileAddress in evm/evmd/upgrades.go.
 WAION_PRECOMPILE_ADDRESS="${WAION_PRECOMPILE_ADDRESS:-0x0000000000000000000000000000000000000900}"
 
-# Feemarket: minimum gas price validators accept and the initial base fee for
-# EIP-1559. Set to 0 for a gas-free network. Default: 1 Gwei (1_000_000_000).
-MIN_GAS_PRICE="${MIN_GAS_PRICE:-1000000000}"
-
 # Validator's initial balance and self-bond amount (gentx), in BASE_DENOM
 INITIAL_BALANCE="${INITIAL_BALANCE:-100000000000000000000000${BASE_DENOM}}"
 GENTX_STAKE_AMOUNT="${GENTX_STAKE_AMOUNT:-1000000000000000000000${BASE_DENOM}}"
@@ -189,14 +185,6 @@ jq --arg denom "$BASE_DENOM" \
       "contract_owner": "OWNER_MODULE"
     }] |
     .app_state.erc20.native_precompiles = [$addr]' "$GENESIS_FILE" > "$TMP_FILE"
-mv "$TMP_FILE" "$GENESIS_FILE"
-
-log "feemarket: setting min_gas_price and base_fee to $MIN_GAS_PRICE"
-MIN_GAS_PRICE_DEC="${MIN_GAS_PRICE}.000000000000000000"
-jq --arg price "$MIN_GAS_PRICE_DEC" \
-   '.app_state.feemarket.params.min_gas_price = $price |
-    .app_state.feemarket.params.base_fee = $price' \
-   "$GENESIS_FILE" > "$TMP_FILE"
 mv "$TMP_FILE" "$GENESIS_FILE"
 
 log "validate-genesis"

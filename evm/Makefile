@@ -101,7 +101,7 @@ OUT_NAME ?= $(EXAMPLE_BINARY)$(BINARY_EXT)
 build: go.sum $(BUILDDIR)/
 	echo "🏗️  Building evmd to $(BUILDDIR)/$(OUT_NAME) ..."
 	echo "BUILD_FLAGS: $(BUILD_FLAGS)"
-	cd $(EVMD_DIR) && CGO_ENABLED="0" \
+	cd $(EVMD_DIR) && CGO_ENABLED="1" \
 	  go build $(BUILD_FLAGS) -o $(BUILDDIR)/$(OUT_NAME) $(EVMD_MAIN_PKG)
 
 # Cross-compile for Linux AMD64 / ARM64
@@ -129,7 +129,7 @@ build-release: build-linux-amd64 build-linux-arm64 build-windows-amd64 build-win
 install: go.sum
 	@echo "🚚  Installing evmd to $(BINDIR) ..."
 	@echo "BUILD_FLAGS: $(BUILD_FLAGS)"
-	@cd $(EVMD_DIR) && CGO_ENABLED="0" \
+	@cd $(EVMD_DIR) && CGO_ENABLED="1" \
 	  go install $(BUILD_FLAGS) $(EVMD_MAIN_PKG)
 
 $(BUILDDIR)/:

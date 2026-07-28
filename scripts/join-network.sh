@@ -48,7 +48,7 @@ GENESIS_SOURCE="${GENESIS_SOURCE:-}"
 # Peers of the existing network, in "node_id@ip:26656" format, comma-separated
 # if more than one. Asked interactively below (defaults to this project's own
 # seed node). Get a node_id by running this on a node that already works:
-# `aiontherad tendermint show-node-id --home ~/.aiontherad`
+# `aiontherad comet show-node-id --home ~/.aiontherad`
 PERSISTENT_PEERS="${PERSISTENT_PEERS:-}"
 DEFAULT_SEED_NODE_ID="3e0645a594888c3809d69d9e6ef40764e426545e"
 DEFAULT_SEED_HOST="seed1.aionthera.org:26656"
@@ -77,6 +77,10 @@ if [[ -z "$GENESIS_SOURCE" ]]; then
 fi
 
 if [[ -z "$PERSISTENT_PEERS" ]]; then
+  echo "Need the seed/peer's node_id? Run this ON THAT NODE (not this machine):"
+  echo "  \$BINARY --home ~/.aiontherad comet show-node-id"
+  echo "Leave blank to accept the defaults below (this project's public seed)."
+  echo
   read -r -p "Seed node_id [$DEFAULT_SEED_NODE_ID]: " SEED_NODE_ID
   SEED_NODE_ID="${SEED_NODE_ID:-$DEFAULT_SEED_NODE_ID}"
   read -r -p "Seed host:port [$DEFAULT_SEED_HOST]: " SEED_HOST

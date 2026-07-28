@@ -111,7 +111,7 @@ if [[ -d "$HOME_DIR" ]]; then
   read -r -p "Delete and recreate? [y/N] " confirm
   if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
     echo "Aborted. If you only want to reset the state (keeping keys/genesis), use:"
-    echo "  $BINARY --home $HOME_DIR tendermint unsafe-reset-all"
+    echo "  $BINARY --home $HOME_DIR comet unsafe-reset-all"
     exit 1
   fi
   rm -rf "$HOME_DIR"
@@ -265,6 +265,10 @@ echo "Address (bech32, account):       $BECH32_ADDR"
 echo "Address (bech32, valoper):        $(run_keyring_cmd "$BINARY" --home "$HOME_DIR" keys show "$VALIDATOR_KEY_NAME" --bech val -a --keyring-backend "$KEYRING_BACKEND")"
 echo "0x address (same account, for MetaMask):"
 "$BINARY" --home "$HOME_DIR" debug addr "$BECH32_ADDR"
+echo
+echo "Node ID (for other nodes' persistent_peers/join-network.sh):"
+echo "  $("$BINARY" --home "$HOME_DIR" comet show-node-id)"
+echo "  (command: $BINARY --home $HOME_DIR comet show-node-id)"
 echo
 echo "======================================================================"
 echo

@@ -52,7 +52,7 @@ GENESIS_SOURCE="${GENESIS_SOURCE:-https://raw.githubusercontent.com/Aionthera/ev
 # seed node). Get a node_id by running this on a node that already works:
 # `aiontherad comet show-node-id --home ~/.aiontherad`
 PERSISTENT_PEERS="${PERSISTENT_PEERS:-}"
-DEFAULT_SEED_NODE_ID="3e0645a594888c3809d69d9e6ef40764e426545e"
+DEFAULT_SEED_NODE_ID="bd7db80c11284c07129e80d2e938fc3938303748"
 DEFAULT_SEED_HOST="seed1.aionthera.org:26656"
 
 # ---------------------------------------------------------------------------
@@ -155,11 +155,20 @@ echo "Node prepared at $HOME_DIR, NOT started yet."
 echo "======================================================================"
 echo
 echo "Next steps:"
-echo "  1) HOME_DIR=$HOME_DIR CHAIN_ID=$CHAIN_ID ./scripts/start-chain.sh"
+echo "  1) ./scripts/start-chain.sh"
+echo "     (picks up the same HOME_DIR/CHAIN_ID defaults as this script —"
+echo "     only pass them again if you overrode them above)"
 echo "  2) Wait for it to sync (catching_up: false):"
 echo "     curl -s http://127.0.0.1:26657/status | jq '.result.sync_info'"
 echo "  3) Have an account with an aaion balance on this node — either import the"
 echo "     same account from another node (keys add --recover, with its mnemonic),"
 echo "     or create a new one and ask someone to send you aaion via tx bank send."
 echo "  4) HOME_DIR=$HOME_DIR CHAIN_ID=$CHAIN_ID FROM_KEY=<account> ./scripts/request-validator.sh"
+echo
+echo "If this node is a SENTRY (the one exposing RPC/P2P to the internet, sitting"
+echo "in front of a validator), the default P2P settings will drop the connection"
+echo "to the validator repeatedly and stall tx propagation. Before going further,"
+echo "follow the \"P2P configuration — sentry + validator\" section in"
+echo "scripts/README.md to accept local/private IPs (addr_book_strict, pex,"
+echo "persistent_peers, unconditional_peer_ids) on both this node and the validator."
 echo "======================================================================"

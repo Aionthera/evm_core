@@ -213,26 +213,9 @@ backend/internet) and a **validator** (signs blocks, not exposed directly),
 the default Tendermint/CometBFT P2P settings cause the connection to drop
 repeatedly and transactions to get stuck in the sentry's mempool.
 
-### Why the default config breaks
-
-| Default | Problem |
-|---|---|
-| `addr_book_strict = true` | Only saves publicly-routable IPs to the address book. Private IPs (192.168.x.x, 10.x.x.x) are never saved → address book stays empty → Peer Exchange (PEX) behaves erratically and interferes with the persistent connection |
-| `pex = true` on validator | Validator crawls for new peers, competing with the persistent sentry connection |
-| `persistent_peers` unidirectional | Only the sentry lists the validator. When the connection drops, the validator doesn't try to reconnect |
-| `unconditional_peer_ids` empty | Validator can refuse the sentry's reconnection if it hits its peer limit |
-
-The result: connection drops every ~1–2 minutes with a pong timeout, and
-transactions submitted to the sentry never propagate to the validator's
-mempool.
-
-### Fix — edit `~/.aiontherad/config/config.toml` on both nodes
-
-Get each node's ID first (run on each machine):
-
+First step pickup the node id from both sentry and validator with:
 ```bash
-./aiontherad-linux-arm64 comet show-node-id
-# note: Cosmos SDK v0.47+ renamed `tendermint` to `comet`
+./aiontherad comet show-node-id
 ```
 
 **Sentry node:**
@@ -276,38 +259,6 @@ curl -s http://localhost:26657/net_info | jq '.result.peers[] | {id: .node_info.
 `is_outbound: true` on the sentry and `is_outbound: false` on the validator is
 the expected state — sentry initiates the connection, validator accepts it.
 
-### Firewall check (if the connection still drops)
-
-If the connection keeps dropping even after the config changes, check whether
-`nf_conntrack` is expiring TCP connections too aggressively:
-
-```bash
-cat /proc/sys/net/netfilter/nf_conntrack_tcp_timeout_established
-# healthy default: 432000 (5 days). Values of 60–120 will drop the P2P connection.
-```
-
-Fix:
-
-```bash
-sudo sysctl -w net.netfilter.nf_conntrack_tcp_timeout_established=432000
-echo "net.netfilter.nf_conntrack_tcp_timeout_established=432000" | sudo tee -a /etc/sysctl.conf
-```
-
----
-
-## REST API (`[api]`) — sentry & full nodes
-
-Sentries and full nodes are the machines meant to answer public REST queries
-(what `rest.aionthera.org` points at, and what the front-end's `chain.ts`
-fetches directly from the browser via `REST_URL`). The validator should
-**not** expose this — it stays behind the sentry, reachable only via P2P
-(see the section above).
-
-`init-chain.sh`/`join-network.sh` only flip `[json-rpc] enable = true`
-automatically — `[api]` (the Cosmos REST/LCD server) is left at its Cosmos
-SDK default (`enable = false`) on every node, validator or not. Turn it on
-by hand on whichever machine should actually serve REST traffic.
-
 ### Enable on the sentry/full node
 
 Edit `~/.aiontherad/config/app.toml`:
@@ -335,18 +286,6 @@ Keep `[api] enable = false` on the validator. It isn't meant to answer public
 queries directly, and every extra exposed port on the machine holding
 `priv_validator_key.json` is one more attack surface — that's the whole point
 of putting it behind a sentry in the first place.
-
-### Verify
-
-```bash
-curl -s http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info | jq .default_node_info.moniker
-```
-
-A JSON response with the node's moniker means `[api]` is up. `curl: (7)
-Connection refused` means it's still disabled (or the port/address doesn't
-match what you set above).
-
----
 
 ## 3. New validator
 

@@ -43,7 +43,9 @@ HOME_DIR="${HOME_DIR:-$HOME/.aiontherad}"
 # Where to get the existing chain's genesis.json from. Can be:
 #   - a local path (e.g. if you copied it via scp from another node beforehand)
 #   - an http(s) URL (e.g. a /genesis.json endpoint you host)
-GENESIS_SOURCE="${GENESIS_SOURCE:-}"
+# Defaults to the genesis.json published in the repo (network/genesis.json),
+# same URL as GENESIS_JSON_URL in the front-end's chain.ts.
+GENESIS_SOURCE="${GENESIS_SOURCE:-https://raw.githubusercontent.com/Aionthera/evm/refs/heads/main/network/genesis.json}"
 
 # Peers of the existing network, in "node_id@ip:26656" format, comma-separated
 # if more than one. Asked interactively below (defaults to this project's own

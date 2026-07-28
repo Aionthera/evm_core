@@ -11,11 +11,11 @@ import (
 // PublicAPI exposes Aionthera-specific node information.
 type PublicAPI struct {
 	logger  log.Logger
-	backend backend.EVMBackend
+	backend backend.BackendI
 }
 
 // NewPublicAPI creates a new Aionthera API instance.
-func NewPublicAPI(logger log.Logger, backend backend.EVMBackend) *PublicAPI {
+func NewPublicAPI(logger log.Logger, backend backend.BackendI) *PublicAPI {
 	return &PublicAPI{
 		logger:  logger.With("module", "aionthera"),
 		backend: backend,
@@ -25,5 +25,5 @@ func NewPublicAPI(logger log.Logger, backend backend.EVMBackend) *PublicAPI {
 // PoolPriceLimit returns the minimum gas price enforced by the EVM txpool (price-limit in app.toml).
 func (api *PublicAPI) PoolPriceLimit() hexutil.Uint64 {
 	api.logger.Debug("aionthera_poolPriceLimit")
-	return hexutil.Uint64(api.backend.GetConfig().JSONRPC.PriceLimit)
+	return hexutil.Uint64(api.backend.GetConfig().EVM.Mempool.PriceLimit)
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 
 	anteinterfaces "github.com/cosmos/evm/ante/interfaces"
@@ -267,14 +266,9 @@ func VerifySignature(
 			feePayerSig[ethcrypto.RecoveryIDOffset] -= 27
 		}
 
-		feePayerPubkey, err := secp256k1.RecoverPubkey(sigHash, feePayerSig)
+		ecPubKey, err := ethcrypto.SigToPub(sigHash, feePayerSig)
 		if err != nil {
 			return errorsmod.Wrap(err, "failed to recover delegated fee payer from sig")
-		}
-
-		ecPubKey, err := ethcrypto.UnmarshalPubkey(feePayerPubkey)
-		if err != nil {
-			return errorsmod.Wrap(err, "failed to unmarshal recovered fee payer pubkey")
 		}
 
 		pk := &ethsecp256k1.PubKey{
@@ -293,7 +287,7 @@ func VerifySignature(
 
 		// VerifySignature of ethsecp256k1 accepts 64 byte signature [R||S]
 		// WARNING! Under NO CIRCUMSTANCES try to use pubKey.VerifySignature there
-		if !secp256k1.VerifySignature(pubKey.Bytes(), sigHash, feePayerSig[:len(feePayerSig)-1]) {
+		if !ethcrypto.VerifySignature(pubKey.Bytes(), sigHash, feePayerSig[:len(feePayerSig)-1]) {
 			return errorsmod.Wrap(errortypes.ErrorInvalidSigner, "unable to verify signer signature of EIP712 typed data")
 		}
 

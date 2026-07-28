@@ -21,7 +21,23 @@ CHAIN_ID="${CHAIN_ID:-aionthera_78912-1}"
 MONIKER="${MONIKER:-my-new-node}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BINARY="${BINARY:-$REPO_ROOT/evm/build/aiontherad}"
+default_binary() {
+  case "$(uname -s)" in
+    Linux)
+      case "$(uname -m)" in
+        x86_64) echo "$REPO_ROOT/evm/build/aiontherad-linux-amd64" ;;
+        aarch64|arm64) echo "$REPO_ROOT/evm/build/aiontherad-linux-arm64" ;;
+      esac
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      case "$(uname -m)" in
+        x86_64) echo "$REPO_ROOT/evm/build/aiontherad-windows-amd64.exe" ;;
+        aarch64|arm64) echo "$REPO_ROOT/evm/build/aiontherad-windows-arm64.exe" ;;
+      esac
+      ;;
+  esac
+}
+BINARY="${BINARY:-$(default_binary)}"
 HOME_DIR="${HOME_DIR:-$HOME/.aiontherad}"
 
 # Where to get the existing chain's genesis.json from. Can be:
@@ -30,22 +46,26 @@ HOME_DIR="${HOME_DIR:-$HOME/.aiontherad}"
 GENESIS_SOURCE="${GENESIS_SOURCE:-}"
 
 # Peers of the existing network, in "node_id@ip:26656" format, comma-separated
-# if more than one. Get the node_id by running this on a node that already
-# works: `aiontherad tendermint show-node-id --home ~/.aiontherad`
+# if more than one. Asked interactively below (defaults to this project's own
+# seed node). Get a node_id by running this on a node that already works:
+# `aiontherad tendermint show-node-id --home ~/.aiontherad`
 PERSISTENT_PEERS="${PERSISTENT_PEERS:-}"
+DEFAULT_SEED_NODE_ID="3e0645a594888c3809d69d9e6ef40764e426545e"
+DEFAULT_SEED_HOST="seed1.aionthera.org:26656"
 
 # ---------------------------------------------------------------------------
 # Initial checks
 # ---------------------------------------------------------------------------
 
-if [[ ! -x "$BINARY" ]]; then
-  echo ">> Binary not found at $BINARY — building it (make -C $REPO_ROOT/evm build)"
-  "$REPO_ROOT/scripts/setup-go-env.sh"
-  make -C "$REPO_ROOT/evm" build
-  if [[ ! -x "$BINARY" ]]; then
-    echo "Build finished but binary still not found at: $BINARY"
-    exit 1
-  fi
+if [[ -z "$BINARY" || ! -x "$BINARY" ]]; then
+  echo "No compiled binary found for this OS/arch (looked for: ${BINARY:-<none detected>})."
+  echo "Available binaries in $REPO_ROOT/evm/build:"
+  ls "$REPO_ROOT/evm/build" 2>/dev/null | sed 's/^/  /'
+  echo "Build the release binaries with:"
+  echo "  ./scripts/build-release.sh"
+  echo "or set BINARY explicitly to override, e.g.:"
+  echo "  BINARY=$REPO_ROOT/evm/build/aiontherad-linux-amd64 $0"
+  exit 1
 fi
 
 if [[ -z "$GENESIS_SOURCE" ]]; then
@@ -57,11 +77,11 @@ if [[ -z "$GENESIS_SOURCE" ]]; then
 fi
 
 if [[ -z "$PERSISTENT_PEERS" ]]; then
-  echo "PERSISTENT_PEERS is not set."
-  echo "Get it by running this on an already-active node on the network:"
-  echo "  aiontherad tendermint show-node-id --home ~/.aiontherad"
-  echo "and build: PERSISTENT_PEERS=\"<node_id>@<existing-node-ip>:26656\""
-  exit 1
+  read -r -p "Seed node_id [$DEFAULT_SEED_NODE_ID]: " SEED_NODE_ID
+  SEED_NODE_ID="${SEED_NODE_ID:-$DEFAULT_SEED_NODE_ID}"
+  read -r -p "Seed host:port [$DEFAULT_SEED_HOST]: " SEED_HOST
+  SEED_HOST="${SEED_HOST:-$DEFAULT_SEED_HOST}"
+  PERSISTENT_PEERS="$SEED_NODE_ID@$SEED_HOST"
 fi
 
 if [[ -d "$HOME_DIR" ]]; then

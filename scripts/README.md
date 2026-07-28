@@ -177,15 +177,21 @@ is already running in production (does not generate a new genesis).
 cd evm && make build
 cd ..
 
-# grab this by running it on an already-active node on the network:
-#   aiontherad tendermint show-node-id --home ~/.aiontherad
-GENESIS_SOURCE=https://<some-node>/genesis.json \
-PERSISTENT_PEERS="<node_id>@<ip>:26656" \
-CHAIN_ID=aionthera_78912-1 \
-./scripts/join-network.sh
+CHAIN_ID=aionthera_78912-1 ./scripts/join-network.sh
 
 ./scripts/start-chain.sh
 ```
+
+`GENESIS_SOURCE` defaults to the `genesis.json` published in this repo
+([`network/genesis.json`](../network/genesis.json), fetched from
+`raw.githubusercontent.com`) — only set it explicitly if you want a different
+source (a local path or another node's endpoint).
+
+Unless `PERSISTENT_PEERS` is already set as an environment variable, the
+script asks for a seed `node_id` and `host:port` interactively, defaulting to
+this project's own seed node (`seed1.aionthera.org`) — press Enter twice to
+accept the defaults, or type a different node/host (e.g. to point at a peer
+other than the public seed).
 
 What `join-network.sh` does:
 
@@ -316,7 +322,7 @@ MONIKER="my-validator" \
 ```
 
 `request-validator.sh` builds and sends the `tx staking create-validator` tx using
-this node's consensus pubkey (`tendermint show-validator`) and the account
+this node's consensus pubkey (`comet show-validator`) and the account
 provided in `FROM_KEY` as self-delegation. **This can only be done once
 per operator account/address** — running it again with the same account fails
 because the validator already exists.
@@ -353,7 +359,7 @@ cd evm && make build
 cd ..
 
 # 1) prepare genesis + peers (generates NEW keys, which will be overwritten in step 3)
-GENESIS_SOURCE=... PERSISTENT_PEERS=... CHAIN_ID=aionthera_78912-1 ./scripts/join-network.sh
+CHAIN_ID=aionthera_78912-1 ./scripts/join-network.sh
 
 # 2) if you only have the account mnemonic (no backup of priv_validator_key.json),
 #    skip to step 3 without restore-node.sh — the old consensus key is gone anyway.

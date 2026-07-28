@@ -21,7 +21,23 @@ set -euo pipefail
 CHAIN_ID="${CHAIN_ID:-aionthera_78912-1}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BINARY="${BINARY:-$REPO_ROOT/evm/build/aiontherad}"
+default_binary() {
+  case "$(uname -s)" in
+    Linux)
+      case "$(uname -m)" in
+        x86_64) echo "$REPO_ROOT/evm/build/aiontherad-linux-amd64" ;;
+        aarch64|arm64) echo "$REPO_ROOT/evm/build/aiontherad-linux-arm64" ;;
+      esac
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      case "$(uname -m)" in
+        x86_64) echo "$REPO_ROOT/evm/build/aiontherad-windows-amd64.exe" ;;
+        aarch64|arm64) echo "$REPO_ROOT/evm/build/aiontherad-windows-arm64.exe" ;;
+      esac
+      ;;
+  esac
+}
+BINARY="${BINARY:-$(default_binary)}"
 HOME_DIR="${HOME_DIR:-$HOME/.aiontherad}"
 NODE_RPC="${NODE_RPC:-tcp://localhost:26657}"
 
@@ -58,14 +74,15 @@ run_keyring_cmd() {
 # Initial checks
 # ---------------------------------------------------------------------------
 
-if [[ ! -x "$BINARY" ]]; then
-  log "Binary not found at $BINARY — building it (make -C $REPO_ROOT/evm build)"
-  "$REPO_ROOT/scripts/setup-go-env.sh"
-  make -C "$REPO_ROOT/evm" build
-  if [[ ! -x "$BINARY" ]]; then
-    echo "Build finished but binary still not found at: $BINARY"
-    exit 1
-  fi
+if [[ -z "$BINARY" || ! -x "$BINARY" ]]; then
+  echo "No compiled binary found for this OS/arch (looked for: ${BINARY:-<none detected>})."
+  echo "Available binaries in $REPO_ROOT/evm/build:"
+  ls "$REPO_ROOT/evm/build" 2>/dev/null | sed 's/^/  /'
+  echo "Build the release binaries with:"
+  echo "  ./scripts/build-release.sh"
+  echo "or set BINARY explicitly to override, e.g.:"
+  echo "  BINARY=$REPO_ROOT/evm/build/aiontherad-linux-amd64 $0"
+  exit 1
 fi
 
 if ! command -v jq >/dev/null 2>&1; then

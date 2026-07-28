@@ -210,15 +210,20 @@ mv "$TMP_FILE" "$GENESIS_FILE"
 # gov, bank, bech32, ics20, ics02, p256, slashing, vesting)
 # ---------------------------------------------------------------------------
 # Same root cause as above: EVMD.DefaultGenesis() is what normally sets
-# app_state.vm.params.active_static_precompiles = AvailableStaticPrecompiles
+# app_state.evm.params.active_static_precompiles = AvailableStaticPrecompiles
 # (evm/evmd/genesis.go), and `aiontherad init` never goes through it. Without
 # this patch the addresses below have no code from the EVM's point of view —
 # calls to them (tx or eth_call) just silently no-op instead of running the
 # precompile logic, with no revert to signal it.
+#
+# NOTE: the module's genesis key is "evm" (x/vm/types.ModuleName = "evm"),
+# NOT "vm" — despite the Go package living at x/vm. Patching .app_state.vm
+# instead just creates an unused, orphaned top-level key that the chain
+# never reads (validate-genesis doesn't catch it either).
 
 log "activating static precompiles (staking, distribution, gov, bank, bech32, ics20, ics02, p256, slashing, vesting)"
 
-jq '.app_state.vm.params.active_static_precompiles = [
+jq '.app_state.evm.params.active_static_precompiles = [
       "0x0000000000000000000000000000000000000100",
       "0x0000000000000000000000000000000000000400",
       "0x0000000000000000000000000000000000000800",

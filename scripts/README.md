@@ -295,6 +295,59 @@ echo "net.netfilter.nf_conntrack_tcp_timeout_established=432000" | sudo tee -a /
 
 ---
 
+## REST API (`[api]`) — sentry & full nodes
+
+Sentries and full nodes are the machines meant to answer public REST queries
+(what `rest.aionthera.org` points at, and what the front-end's `chain.ts`
+fetches directly from the browser via `REST_URL`). The validator should
+**not** expose this — it stays behind the sentry, reachable only via P2P
+(see the section above).
+
+`init-chain.sh`/`join-network.sh` only flip `[json-rpc] enable = true`
+automatically — `[api]` (the Cosmos REST/LCD server) is left at its Cosmos
+SDK default (`enable = false`) on every node, validator or not. Turn it on
+by hand on whichever machine should actually serve REST traffic.
+
+### Enable on the sentry/full node
+
+Edit `~/.aiontherad/config/app.toml`:
+
+```toml
+[api]
+enable = true
+swagger = false
+address = "tcp://0.0.0.0:1317"
+
+# Only needed if a browser calls this endpoint directly (e.g. the front-end's
+# fetch() to REST_URL in chain.ts) with no reverse proxy in front adding CORS
+# headers. The Cosmos SDK REST server's CORS support is all-or-nothing
+# (wildcard "*"), not a per-origin allowlist — don't rely on it alone if
+# this port is reachable from the public internet; put it behind a reverse
+# proxy (nginx/caddy) with a real allowlist instead when possible.
+enabled-unsafe-cors = true
+```
+
+Restart the node (`./scripts/start-chain.sh`) after editing.
+
+### Validator: leave it disabled
+
+Keep `[api] enable = false` on the validator. It isn't meant to answer public
+queries directly, and every extra exposed port on the machine holding
+`priv_validator_key.json` is one more attack surface — that's the whole point
+of putting it behind a sentry in the first place.
+
+### Verify
+
+```bash
+curl -s http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info | jq .default_node_info.moniker
+```
+
+A JSON response with the node's moniker means `[api]` is up. `curl: (7)
+Connection refused` means it's still disabled (or the port/address doesn't
+match what you set above).
+
+---
+
 ## 3. New validator
 
 You have a full node that's **already synced** and an account with enough

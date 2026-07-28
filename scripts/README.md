@@ -200,6 +200,95 @@ What `join-network.sh` does:
 
 ---
 
+## P2P configuration — sentry + validator
+
+When the network has a **sentry node** (full node that exposes JSON-RPC to the
+backend/internet) and a **validator** (signs blocks, not exposed directly),
+the default Tendermint/CometBFT P2P settings cause the connection to drop
+repeatedly and transactions to get stuck in the sentry's mempool.
+
+### Why the default config breaks
+
+| Default | Problem |
+|---|---|
+| `addr_book_strict = true` | Only saves publicly-routable IPs to the address book. Private IPs (192.168.x.x, 10.x.x.x) are never saved → address book stays empty → Peer Exchange (PEX) behaves erratically and interferes with the persistent connection |
+| `pex = true` on validator | Validator crawls for new peers, competing with the persistent sentry connection |
+| `persistent_peers` unidirectional | Only the sentry lists the validator. When the connection drops, the validator doesn't try to reconnect |
+| `unconditional_peer_ids` empty | Validator can refuse the sentry's reconnection if it hits its peer limit |
+
+The result: connection drops every ~1–2 minutes with a pong timeout, and
+transactions submitted to the sentry never propagate to the validator's
+mempool.
+
+### Fix — edit `~/.aiontherad/config/config.toml` on both nodes
+
+Get each node's ID first (run on each machine):
+
+```bash
+./aiontherad-linux-arm64 comet show-node-id
+# note: Cosmos SDK v0.47+ renamed `tendermint` to `comet`
+```
+
+**Sentry node:**
+
+```toml
+[p2p]
+addr_book_strict = false
+pex = true
+persistent_peers = "<validator_node_id>@<validator_ip>:26656"
+```
+
+If you later add external validators/peers on the sentry add the new peer to `persistent_peers`. Also set `private_peer_ids` to
+the validator's node ID so the sentry never advertises the validator's address
+to external peers.
+
+**Validator:**
+
+```toml
+[p2p]
+addr_book_strict = false
+pex = false                         # validators should not be discoverable by the network
+persistent_peers = "<sentry_node_id>@<sentry_ip>:26656"
+unconditional_peer_ids = "<sentry_node_id>"   # never refuse the sentry's reconnection
+```
+
+`pex = false` on the validator is a permanent recommendation regardless of
+how many nodes you add — the validator should always be behind sentries.
+
+### Verify
+
+After restarting both nodes:
+
+```bash
+# on sentry: should show the validator peer with is_outbound = true
+curl -s http://localhost:26657/net_info | jq '.result.peers[] | {id: .node_info.id, outbound: .is_outbound}'
+
+# on validator: should show the sentry peer with is_outbound = false (accepted inbound)
+curl -s http://localhost:26657/net_info | jq '.result.peers[] | {id: .node_info.id, outbound: .is_outbound}'
+```
+
+`is_outbound: true` on the sentry and `is_outbound: false` on the validator is
+the expected state — sentry initiates the connection, validator accepts it.
+
+### Firewall check (if the connection still drops)
+
+If the connection keeps dropping even after the config changes, check whether
+`nf_conntrack` is expiring TCP connections too aggressively:
+
+```bash
+cat /proc/sys/net/netfilter/nf_conntrack_tcp_timeout_established
+# healthy default: 432000 (5 days). Values of 60–120 will drop the P2P connection.
+```
+
+Fix:
+
+```bash
+sudo sysctl -w net.netfilter.nf_conntrack_tcp_timeout_established=432000
+echo "net.netfilter.nf_conntrack_tcp_timeout_established=432000" | sudo tee -a /etc/sysctl.conf
+```
+
+---
+
 ## 3. New validator
 
 You have a full node that's **already synced** and an account with enough

@@ -6,6 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/cosmos/evm/rpc/backend"
+	"github.com/cosmos/evm/rpc/namespaces/aionthera"
 	"github.com/cosmos/evm/rpc/namespaces/ethereum/debug"
 	"github.com/cosmos/evm/rpc/namespaces/ethereum/eth"
 	"github.com/cosmos/evm/rpc/namespaces/ethereum/eth/filters"
@@ -28,13 +29,14 @@ const (
 
 	// Ethereum namespaces
 
-	Web3Namespace     = "web3"
-	EthNamespace      = "eth"
-	PersonalNamespace = "personal"
-	NetNamespace      = "net"
-	TxPoolNamespace   = "txpool"
-	DebugNamespace    = "debug"
-	MinerNamespace    = "miner"
+	Web3Namespace      = "web3"
+	EthNamespace       = "eth"
+	PersonalNamespace  = "personal"
+	NetNamespace       = "net"
+	TxPoolNamespace    = "txpool"
+	DebugNamespace     = "debug"
+	MinerNamespace     = "miner"
+	AiontheraNamespace = "aionthera"
 
 	apiVersion = "1.0"
 )
@@ -52,6 +54,21 @@ var apiCreators map[string]APICreator
 
 func init() {
 	apiCreators = map[string]APICreator{
+		AiontheraNamespace: func(
+			ctx *server.Context,
+			_ client.Context,
+			_ *stream.RPCStream,
+			backend backend.BackendI,
+		) []rpc.API {
+			return []rpc.API{
+				{
+					Namespace: AiontheraNamespace,
+					Version:   apiVersion,
+					Service:   aionthera.NewPublicAPI(ctx.Logger, backend),
+					Public:    true,
+				},
+			}
+		},
 		EthNamespace: func(
 			ctx *server.Context,
 			clientCtx client.Context,

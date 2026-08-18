@@ -220,11 +220,17 @@ First step pickup the node id from both sentry and validator with:
 
 **Sentry node:**
 
+``config.toml``
 ```toml
 [p2p]
 addr_book_strict = false
 pex = true
 persistent_peers = "<validator_node_id>@<validator_ip>:26656"
+```
+``app.toml``
+```toml
+[api]
+enable-unsafe-cors = true
 ```
 
 If you later add external validators/peers on the sentry add the new peer to `persistent_peers`. Also set `private_peer_ids` to
@@ -233,6 +239,7 @@ to external peers.
 
 **Validator:**
 
+``config.toml``
 ```toml
 [p2p]
 addr_book_strict = false

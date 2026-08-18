@@ -247,6 +247,11 @@ pex = false                         # validators should not be discoverable by t
 persistent_peers = "<sentry_node_id>@<sentry_ip>:26656"
 unconditional_peer_ids = "<sentry_node_id>"   # never refuse the sentry's reconnection
 ```
+``app.toml``
+```toml
+[api]
+enabled = false
+```
 
 `pex = false` on the validator is a permanent recommendation regardless of
 how many nodes you add — the validator should always be behind sentries.
@@ -265,34 +270,6 @@ curl -s http://localhost:26657/net_info | jq '.result.peers[] | {id: .node_info.
 
 `is_outbound: true` on the sentry and `is_outbound: false` on the validator is
 the expected state — sentry initiates the connection, validator accepts it.
-
-### Enable on the sentry/full node
-
-Edit `~/.aiontherad/config/app.toml`:
-
-```toml
-[api]
-enable = true
-swagger = false
-address = "tcp://0.0.0.0:1317"
-
-# Only needed if a browser calls this endpoint directly (e.g. the front-end's
-# fetch() to REST_URL in chain.ts) with no reverse proxy in front adding CORS
-# headers. The Cosmos SDK REST server's CORS support is all-or-nothing
-# (wildcard "*"), not a per-origin allowlist — don't rely on it alone if
-# this port is reachable from the public internet; put it behind a reverse
-# proxy (nginx/caddy) with a real allowlist instead when possible.
-enabled-unsafe-cors = true
-```
-
-Restart the node (`./scripts/start-chain.sh`) after editing.
-
-### Validator: leave it disabled
-
-Keep `[api] enable = false` on the validator. It isn't meant to answer public
-queries directly, and every extra exposed port on the machine holding
-`priv_validator_key.json` is one more attack surface — that's the whole point
-of putting it behind a sentry in the first place.
 
 ## 3. New validator
 
@@ -313,7 +290,6 @@ First, make sure the account exists in this node's keyring:
 Then, with the node synced (`catching_up: false`):
 
 ```bash
-HOME_DIR=~/.aiontherad \
 CHAIN_ID=aionthera_78912-1 \
 FROM_KEY=validator \
 MONIKER="my-validator" \
@@ -343,7 +319,7 @@ machines.
 ### 4.1 Routine backup (do this regularly, not just before touching the machine)
 
 ```bash
-HOME_DIR=~/.aiontherad ./scripts/backup-node.sh
+./scripts/backup-node.sh
 ```
 
 Generates a `.tar.gz.gpg` with `priv_validator_key.json`, `node_key.json`,
@@ -366,7 +342,7 @@ CHAIN_ID=aionthera_78912-1 ./scripts/join-network.sh
 ./scripts/restore-node.sh /path/aionthera-backup-....tar.gz.gpg
 
 # 3) if you didn't restore keyring-file in the step above, import the account via mnemonic:
-HOME_DIR=~/.aiontherad KEY_NAME=validator ./scripts/import-key.sh
+KEY_NAME=validator ./scripts/import-key.sh
 
 ./scripts/start-chain.sh
 ```

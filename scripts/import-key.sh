@@ -91,14 +91,14 @@ case "$IMPORT_MODE" in
       echo "!! MNEMONIC came via environment variable — make sure this shell/history isn't exposed."
       if [[ "$KEYRING_BACKEND" == "file" && -n "$KEYRING_PASSPHRASE" ]]; then
         printf '%s\n%s\n%s\n' "$MNEMONIC" "$KEYRING_PASSPHRASE" "$KEYRING_PASSPHRASE" |
-          "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --recover --keyring-backend "$KEYRING_BACKEND"
+          "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --recover --coin-type 60 --keyring-backend "$KEYRING_BACKEND"
       else
         printf '%s\n' "$MNEMONIC" |
-          "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --recover --keyring-backend "$KEYRING_BACKEND"
+          "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --recover --coin-type 60 --keyring-backend "$KEYRING_BACKEND"
       fi
     else
       echo ">> Paste the mnemonic when prompted (this script doesn't save it to any file)."
-      "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --recover --keyring-backend "$KEYRING_BACKEND"
+      "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --recover --coin-type 60 --keyring-backend "$KEYRING_BACKEND"
     fi
     ;;
 

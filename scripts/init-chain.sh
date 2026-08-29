@@ -129,9 +129,9 @@ log "init"
 log "keys add $VALIDATOR_KEY_NAME"
 if [[ "$KEYRING_BACKEND" == "file" && -n "$KEYRING_PASSPHRASE" ]]; then
   printf '%s\n%s\n' "$KEYRING_PASSPHRASE" "$KEYRING_PASSPHRASE" |
-    "$BINARY" --home "$HOME_DIR" keys add "$VALIDATOR_KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1
+    "$BINARY" --home "$HOME_DIR" keys add "$VALIDATOR_KEY_NAME" --coin-type 60 --keyring-backend "$KEYRING_BACKEND" 2>&1
 else
-  "$BINARY" --home "$HOME_DIR" keys add "$VALIDATOR_KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1
+  "$BINARY" --home "$HOME_DIR" keys add "$VALIDATOR_KEY_NAME" --coin-type 60 --keyring-backend "$KEYRING_BACKEND" 2>&1
 fi
 
 echo "Private key (0x):"
@@ -158,11 +158,41 @@ log "collect-gentxs"
 "$BINARY" --home "$HOME_DIR" genesis collect-gentxs
 
 # ---------------------------------------------------------------------------
+# Replace "stake" with BASE_DENOM in all module params
+#
+# `aiontherad init` goes through BasicModuleManager.DefaultGenesis(), NOT
+# EVMD.DefaultGenesis(), so every module keeps its SDK defaults (stake).
+# x/vm.InitGenesis panics if evm_denom has no denom_metadata in the bank,
+# and x/staking/mint/gov/crisis also need to use the chain's native denom.
+# ---------------------------------------------------------------------------
+
+log "patching genesis: replacing stake with $BASE_DENOM in all module params"
+GENESIS_FILE="$HOME_DIR/config/genesis.json"
+TMP_FILE="$(mktemp)"
+jq --arg base "$BASE_DENOM" '
+  .app_state.staking.params.bond_denom = $base |
+  (if .app_state.mint? then .app_state.mint.params.mint_denom = $base else . end) |
+  (if .app_state.gov?.params?.min_deposit? then
+    .app_state.gov.params.min_deposit = (.app_state.gov.params.min_deposit | map(.denom = $base))
+   else . end) |
+  (if .app_state.gov?.params?.expedited_min_deposit? then
+    .app_state.gov.params.expedited_min_deposit = (.app_state.gov.params.expedited_min_deposit | map(.denom = $base))
+   else . end) |
+  (if .app_state.crisis?.constant_fee? then
+    .app_state.crisis.constant_fee.denom = $base
+   else . end) |
+  .app_state.evm.params.evm_denom = $base |
+  (if .app_state.evm.params.extended_denom_options? then
+    .app_state.evm.params.extended_denom_options.extended_denom = $base
+   else . end)
+' "$GENESIS_FILE" > "$TMP_FILE"
+mv "$TMP_FILE" "$GENESIS_FILE"
+
+# ---------------------------------------------------------------------------
 # Denom metadata in the bank module (required, otherwise start panics)
 # ---------------------------------------------------------------------------
 
 log "adjusting denom_metadata in genesis"
-GENESIS_FILE="$HOME_DIR/config/genesis.json"
 TMP_FILE="$(mktemp)"
 
 jq --arg base "$BASE_DENOM" \

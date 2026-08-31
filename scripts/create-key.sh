@@ -78,9 +78,9 @@ echo ">> keys add $KEY_NAME (keyring: $KEYRING_BACKEND, home: $HOME_DIR)"
 
 if [[ "$KEYRING_BACKEND" == "file" && -n "$KEYRING_PASSPHRASE" ]]; then
   printf '%s\n%s\n' "$KEYRING_PASSPHRASE" "$KEYRING_PASSPHRASE" |
-    "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1
+    "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --coin-type 60 --keyring-backend "$KEYRING_BACKEND" 2>&1
 else
-  "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --keyring-backend "$KEYRING_BACKEND" 2>&1
+  "$BINARY" --home "$HOME_DIR" keys add "$KEY_NAME" --coin-type 60 --keyring-backend "$KEYRING_BACKEND" 2>&1
 fi
 
 echo "Private key (0x):"

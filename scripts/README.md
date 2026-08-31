@@ -309,6 +309,19 @@ immediately and move the backup off this machine. From this point on,
 without a backup means permanently losing the ability to sign blocks with
 that identity.
 
+### Editing an existing validator (e.g. commission rate)
+
+```bash
+COMMISSION_RATE=0.08 ./scripts/edit-validator.sh
+```
+
+`edit-validator.sh` builds and sends the `tx staking edit-validator` tx. It
+can also update `MONIKER`, `IDENTITY`, `WEBSITE`, `SECURITY_CONTACT` and
+`DETAILS` — leave a variable unset to keep that field unchanged. Note the new
+commission rate can't exceed the `commission-max-rate` set at validator
+creation, and the chain only allows one commission-rate change per
+`commission-max-change-rate` window (default 24h).
+
 ---
 
 ## 4. Existing validator

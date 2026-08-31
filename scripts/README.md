@@ -127,7 +127,7 @@ the default:
 BINARY=evm/build/aiontherad-linux-arm64 ./scripts/init-chain.sh
 ```
 
-## Index
+# Index
 
 | Scenario | Situation | Scripts, in order |
 |---|---|---|
@@ -135,6 +135,7 @@ BINARY=evm/build/aiontherad-linux-arm64 ./scripts/init-chain.sh
 | [2. Existing chain](#2-existing-chain) | Join as a full node on a network that's already running | `join-network.sh` → `start-chain.sh` |
 | [3. New validator](#3-new-validator) | Node synced, account with balance, no `create-validator` yet | `create-key.sh` (or `import-key.sh`) → `request-validator.sh` |
 | [4. Existing validator](#4-existing-validator) | Recover/move a validator that already exists on-chain | `backup-node.sh` / `restore-node.sh` (+ `import-key.sh`) |
+| [5. Performance configurations](#5-performance-configurations) | Node using too much RAM/CPU, needs tuning | Manual edits to `app.toml` / `config.toml` |
 
 ---
 
@@ -367,3 +368,61 @@ downtime:
 aiontherad --home ~/.aiontherad tx slashing unjail \
   --from validator --chain-id aionthera_78912-1
 ```
+
+---
+
+## 5. Performance configurations
+
+If a node's RAM usage is too high, these are the settings most likely to move
+the needle, in order of impact. All of them require a node restart to take
+effect.
+
+### `app.toml`
+
+```toml
+# IAVL tree cache size (number of nodes). This is the single biggest lever —
+# it defaults to 781250 (sized for archive/mainnet-class nodes). Lowering it
+# drastically cuts RAM at the cost of more disk reads on cache misses.
+iavl-cache-size = 781250
+
+# Fast node speeds up reads but holds more in memory. Disable to save RAM.
+iavl-disable-fastnode = false
+
+# Caches the most-accessed IAVL nodes across blocks. Helps query performance
+# but can grow large under heavy read traffic. Disable to free memory at the
+# cost of repeated-query performance.
+inter-block-cache = true
+
+# "default" keeps the last 362880 states. "everything" keeps only the last 2,
+# reducing what needs to stay "hot" in memory/disk.
+pruning = "default"
+```
+
+```toml
+# EVM tx pool sizing — retains pending/queued txs in memory. Lower these if
+# the node doesn't need to hold large amounts of pending EVM traffic.
+[evm.mempool]
+account-slots = 16
+global-slots = 5120
+account-queue = 64
+global-queue = 1024
+```
+
+### `config.toml`
+
+```toml
+[mempool]
+# Total tx cap and byte cap for the CometBFT/app mempool. 1GB is a lot of
+# headroom if the node doesn't need to buffer that much pending tx volume.
+size = 5000
+max_txs_bytes = 1073741824
+cache_size = 10000
+
+# App-mempool only: LRU cache for deduplicating seen txs.
+seen_cache_size = 100000
+```
+
+**Rule of thumb:** if memory grows roughly with chain state size (not with
+traffic), `iavl-cache-size` is almost always the main driver — start there.
+If it grows with traffic/load instead, look at the mempool settings on both
+sides (CometBFT `[mempool]` and `[evm.mempool]`).
